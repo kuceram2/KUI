@@ -1,5 +1,6 @@
-import sim_game_board as gb # helper module
+import sim_game_board as gb
 from math import inf
+import random
 import time
 
 type Move = tuple[int, int]
@@ -20,19 +21,20 @@ DIRECTIONS: list[Direction] = [
 EMPTY_COLOR = -1
 WHITE = 1
 BLACK = 0
-SURFACE = 15 # maximal depth of MiniMax search
-MY_VALUES_W = 1 # weight of number of moves I can make in some state
-OPP_VALUES_W = 0.5 # -|| - but opponent
+SURFACE = 15
+MY_VALUES_W = 10 # weight of number of moves I can make in some state
+OPP_VALUES_W = 10 # -|| - but opponent
+POINTS_W = 10 # weight of the amount of points recieved in a state
 SAFE_TIME = 4.0 # safe time for minimax to run to terminate in time
-STONES_W = 1 #weight of number of captured stones in a state
+
 
 def add(a: Move, b: Direction) -> Move:
     return (a[0] + b[0], a[1] + b[1])
 
 class Node:
-    """Node used in MiniMax search, stores estimated value of
-    given state and the move that led to the state"""
-    def __init__(self, parent_move, value = None):
+    def __init__(self, parent_move, alpha = -inf, beta = inf, value = None):
+        self.alpha = alpha
+        self.beta = beta
         self.value = value
         self.parent_move = parent_move
 
@@ -45,8 +47,9 @@ class Node:
         else: return other
 
 class MyPlayer:
-    """Num. of possible moves, amount of captured stones and value of stones at various 
-       positions as params to eval of game state."""
+    """uses number of valid actions, worth of different stones and number of stones. Also prooning and in-time termination"""
+
+    # TODO replace docstring with a short description of your player
 
     def __init__(
         self, my_color: PlayerColor, opponent_color: PlayerColor, board_size: int = 8
@@ -60,64 +63,63 @@ class MyPlayer:
     def minimax(self, board, parent_move, depth, alpha, beta, maxPlayer) -> Node:
 
         elapsed_time = time.time() - self.start_time
-
+        #print(elapsed_time)
         # if exploartion ended
         if(depth == 0 or self.__is_game_over(board) or elapsed_time >= SAFE_TIME):
             estimated_val = self.eval(board)
-            # returns object containing evaluation of state and move that led to the state
+            #if(elapsed_time >= 4.0): print("depth:", depth)
             return Node(parent_move,value=estimated_val)
 
-        # maximizing player
         if maxPlayer:
             max_eval = Node((-1,-1), value= -inf)
             moves = self.get_all_valid_moves(board, self.my_color)
             for move in moves:
                 new_board = gb.simulate_move(move, self.my_color, board)
                 new_node = self.minimax(new_board, move, depth - 1, alpha, beta, False)
+                #print("options:", new_node.value, max_eval.value)
                 max_eval = new_node.__maximum__(max_eval)
+                #print("chosen max: ", max_eval.value)
                 alpha = max(alpha, new_node.value)
                 if beta <= alpha:
                     break
-            # while returning to surface, update the "parent_action"
+
             if(depth != SURFACE): max_eval.parent_move = parent_move
             return max_eval
         
-        # minimizing player
         else:
             min_eval = Node((-1,-1), value= inf)
             moves = self.get_all_valid_moves(board, self.opponent_color)
             for move in moves:
                 new_board = gb.simulate_move(move, self.opponent_color, board)
                 new_node = self.minimax(new_board, move, depth-1, alpha, beta, True)
+                #print("options:", new_node.value, min_eval.value)
                 min_eval = new_node.__minimum__(min_eval)
+                #print("chosen min: ", min_eval.value )
                 beta = min(beta, new_node.value)
                 if beta <= alpha:
                     break
-            # while returning to surface, update the "parent_action"
+
             if(depth != SURFACE): min_eval.parent_move = parent_move
             return min_eval
 
     def __is_game_over(self, board: BoardState):
-        """Checks if the game is over (no moves available for any player)"""
         if ((len(self.get_all_valid_moves(board, WHITE)) == 0) and \
                (len(self.get_all_valid_moves(board, BLACK)) == 0)):
+            #print("Game is over")
             return True
         return False
 
     def get_board_cost(self, board: BoardState):
         """Calculates value of given board based on sections"""
         cost = 0
-        board_parts = gb.board_parts[self.board_size]
-        board_parts_costs = gb.board_parts_costs[self.board_size]
-
         for i in range(len(gb.board_parts)):
-            for pos in board_parts[i]:
-                if(board[pos[0]][pos[1]] == self.my_color): cost += board_parts_costs[i]
-                elif(board[pos[0]][pos[1]] == self.opponent_color): cost -= board_parts_costs[i]
+            for pos in gb.board_parts[i]:
+                if(board[pos[0]][pos[1]] == self.my_color): cost += gb.board_parts_costs[i]
+                elif(board[pos[0]][pos[1]] == self.opponent_color): cost -= gb.board_parts_costs[i]
         return cost
         
     def count_possible_moves(self, board):
-        """Returns the difference between amount of my and opponents moves"""
+        """Calculates how many moves are available for player compared to the opponent"""
         my_moves = len(self.get_all_valid_moves(board, self.my_color))
         opp_moves = len(self.get_all_valid_moves(board, self.opponent_color))
         result = (MY_VALUES_W * my_moves) - (OPP_VALUES_W * opp_moves)
@@ -130,17 +132,33 @@ class MyPlayer:
             for j in range(len(board[i])):
                 if board[j][i] == self.my_color: count += 1
                 elif board[j][i] == self.opponent_color: count -= 1
-        return count * STONES_W
+        return count * POINTS_W
 
     def eval(self, board: BoardState):
         """evaluates how good given state is"""
         e = self.get_board_cost(board)
         f = self.count_possible_moves(board)
-        return e + f
+        g = self.count_stones(board)
+        return e + f + g
 
     def select_move(self, board: BoardState) -> Move:
+        #print("Dummy board: ",self.get_board_cost(gb.dummy_board), "\n\n")
+
+        #moves = self.get_all_my_valid_moves(board)
+
+        # print(moves, "\n")
+        # for i in range(len(board)):
+        #     print(board[i])
+        # print("----------------------------------------------")
         self.start_time = time.time()
         best_node = self.minimax(board, None, SURFACE, -inf, inf, True )
+        ##print(best_node.parent_move, best_node.value)
+        # new_board = gb.simulate_move(moves[0],self.my_color, board)
+        # for i in range(len(new_board)):
+        #     print(new_board[i])
+
+        # new_moves = self.get_all_valid_moves(new_board, self.opponent_color)
+        # print("\n", new_moves)
         return best_node.parent_move
 
     def get_all_my_valid_moves(self, board: BoardState) -> list[Move]:
