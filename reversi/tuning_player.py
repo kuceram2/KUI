@@ -21,11 +21,35 @@ DIRECTIONS: list[Direction] = [
 EMPTY_COLOR = -1
 WHITE = 1
 BLACK = 0
-SURFACE = 15
+SURFACE = 3
+
+
+
+params = [15,20,10,10,10,15,0,0,0]
+"""Meanings:
+    "corners_c":    4,      0
+    "edges_c":      2,      1
+    "center_c":     3,      2
+    "f_ring_c":     2,      3
+    "s_ring_c":     1,      4
+    "buffers_c":    -1      5
+    "my_values_w":    1,    6 
+    "opp_values_w":   1,    7
+    "points_w":     1,      8
+"""
+
+
 MY_VALUES_W = 1 # weight of number of moves I can make in some state
-OPP_VALUES_W = 0.5 # -|| - but opponent
+OPP_VALUES_W = 1 # -|| - but opponent
+POINTS_W = 1 # weight of the amount of points recieved in a state
 SAFE_TIME = 4.0 # safe time for minimax to run to terminate in time
-STONES_W = 1 #weight of number of captured stones in a state
+
+CORNERS_C = 4
+EDGES_C = 2
+CENTER_C = 3
+F_RING_C = 2
+S_RING_C = 1
+BUFFERS_C = -1 
 
 def add(a: Move, b: Direction) -> Move:
     return (a[0] + b[0], a[1] + b[1])
@@ -46,10 +70,15 @@ class Node:
         else: return other
 
 class MyPlayer:
-    """Template Docstring for MyPlayer, look at the TODOs"""
+    """uses number of valid actions, worth of different stones and number of stones.
+      Also prooning and in-time termination
+      params change based on tuning results.
+      """
+
+    # TODO replace docstring with a short description of your player
 
     def __init__(
-        self, my_color: PlayerColor, opponent_color: PlayerColor, board_size: int = 8
+        self, my_color: PlayerColor, opponent_color: PlayerColor, param_idx, param_val, board_size: int = 8
     ):
         self.name = "kucerm59"
         self.my_color = my_color
@@ -57,13 +86,20 @@ class MyPlayer:
         self.board_size = board_size
         self.start_time = 0
 
+        #print("RECIEVED:", param_idx, param_val)
+        self.param_idx = int(param_idx)
+        self.param_val = int(param_val)
+        params[self.param_idx] = self.param_val
+        #print("Recieved tuning parametetrs: ", self.param_idx, self.param_val)
+
     def minimax(self, board, parent_move, depth, alpha, beta, maxPlayer) -> Node:
 
         elapsed_time = time.time() - self.start_time
-
+        #print(elapsed_time)
         # if exploartion ended
         if(depth == 0 or self.__is_game_over(board) or elapsed_time >= SAFE_TIME):
             estimated_val = self.eval(board)
+            #if(elapsed_time >= 4.0): print("depth:", depth)
             return Node(parent_move,value=estimated_val)
 
         if maxPlayer:
@@ -110,14 +146,15 @@ class MyPlayer:
         cost = 0
         for i in range(len(gb.board_parts)):
             for pos in gb.board_parts[i]:
-                if(board[pos[0]][pos[1]] == self.my_color): cost += gb.board_parts_costs[i]
-                elif(board[pos[0]][pos[1]] == self.opponent_color): cost -= gb.board_parts_costs[i]
+                if(board[pos[0]][pos[1]] == self.my_color): cost += params[i]
+                elif(board[pos[0]][pos[1]] == self.opponent_color): cost -= params[i]
         return cost
         
     def count_possible_moves(self, board):
+        """Calculates how many moves are available for player compared to the opponent"""
         my_moves = len(self.get_all_valid_moves(board, self.my_color))
         opp_moves = len(self.get_all_valid_moves(board, self.opponent_color))
-        result = (MY_VALUES_W * my_moves) - (OPP_VALUES_W * opp_moves)
+        result = (params[6] * my_moves) - (params[7] * opp_moves)
         return result
 
     def count_stones(self, board):
@@ -127,13 +164,14 @@ class MyPlayer:
             for j in range(len(board[i])):
                 if board[j][i] == self.my_color: count += 1
                 elif board[j][i] == self.opponent_color: count -= 1
-        return count * STONES_W
+        return count * params[8]
 
     def eval(self, board: BoardState):
         """evaluates how good given state is"""
         e = self.get_board_cost(board)
         f = self.count_possible_moves(board)
-        return e + f
+        g = self.count_stones(board)
+        return e + f + g
 
     def select_move(self, board: BoardState) -> Move:
         #print("Dummy board: ",self.get_board_cost(gb.dummy_board), "\n\n")

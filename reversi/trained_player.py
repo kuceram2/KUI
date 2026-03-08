@@ -1,4 +1,4 @@
-import sim_game_board as gb
+import trained_sim_game_board as gb
 from math import inf
 import random
 import time
@@ -25,7 +25,7 @@ SURFACE = 15
 MY_VALUES_W = 1 # weight of number of moves I can make in some state
 OPP_VALUES_W = 0.5 # -|| - but opponent
 SAFE_TIME = 4.0 # safe time for minimax to run to terminate in time
-STONES_W = 1 #weight of number of captured stones in a state
+STONES_W = 1 # weight of number of captured stones in a state
 
 def add(a: Move, b: Direction) -> Move:
     return (a[0] + b[0], a[1] + b[1])
@@ -48,6 +48,8 @@ class Node:
 class MyPlayer:
     """Template Docstring for MyPlayer, look at the TODOs"""
 
+    # TODO replace docstring with a short description of your player
+
     def __init__(
         self, my_color: PlayerColor, opponent_color: PlayerColor, board_size: int = 8
     ):
@@ -60,10 +62,11 @@ class MyPlayer:
     def minimax(self, board, parent_move, depth, alpha, beta, maxPlayer) -> Node:
 
         elapsed_time = time.time() - self.start_time
-
+        #print(elapsed_time)
         # if exploartion ended
         if(depth == 0 or self.__is_game_over(board) or elapsed_time >= SAFE_TIME):
             estimated_val = self.eval(board)
+            #if(elapsed_time >= 4.0): print("depth:", depth)
             return Node(parent_move,value=estimated_val)
 
         if maxPlayer:

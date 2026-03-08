@@ -14,7 +14,7 @@ logfile="overnight/$2_vs_$3_$(date +%m-%d_%H-%M-%S).log"
 log_interval=5
 
 echo "Run started at $(date)" > "$logfile"
-echo "STARTED"
+#cho "STARTED"
 for ((i=1; i<=runs; i++))
 do
 
@@ -29,6 +29,7 @@ echo "result $status"
 remaining=$((runs-i)) 
 percent=$((100*i/runs)) 
 printf "\rProgress: %d/%d (%d%%) | Remaining: %d\n" "$i" "$runs" "$percent" "$remaining" 
+echo "Next game started $(date)"
 # periodic logging
 if (( i % log_interval == 0 )) 
 then
@@ -56,4 +57,4 @@ echo "100: $2 win | 101: $3 win | 99: draw | 90: $2 overtime | 91: $3 overtime"
 
 runtime=$SECONDS
 printf "Total runtime: %02d:%02d \n" $((runtime/60)) $((runtime%60))
-echo -e "\a \a"
+echo -e "\a"
