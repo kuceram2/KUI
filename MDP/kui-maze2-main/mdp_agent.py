@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import random
+import copy
 from typing import Optional
 
 from kuimaze2 import MDPProblem
@@ -23,6 +24,8 @@ class MDPAgent:
         
         self.values = {}
         self.qvalues = {}
+        self.termination_req = False
+
         
 
     def render(
@@ -106,7 +109,6 @@ class ValueIterationAgent(MDPAgent):
         self.actions = self.env.get_actions(self.states[0])
         self.qvalues = self.init_qvalues()
         self.policy = {}
-        self.termination_req = False
         
         # print("values: ",self.values)
         # print("actions: ", self.actions)
@@ -131,13 +133,7 @@ class ValueIterationAgent(MDPAgent):
 
     def bellman_update(self, state: State):
         
-        actions = self.env.get_actions(state)
-        
-        for action in actions:
-            #print(action)
-            self.qvalues[state][action] = self.get_qvalue(state, action)
-            #print(self.qvalues[state])
-        best_action = max(self.qvalues[state], key=self.qvalues[state].get)
+        best_action = self.get_best_action(state)
         new_value = self.qvalues[state][best_action]
         if not self.tuning_done(self.values[state], new_value): self.termination_req = False 
         self.values[state] = new_value
@@ -171,15 +167,15 @@ class PolicyIterationAgent(MDPAgent):
         self.values = self.init_values()
         self.policy = self.init_policy()
         self.qvalues = self.init_qvalues()
-        self.new_policy = {}
-        self.policy_unchanged = False
+        self.new_policy = self.init_policy()
         
-        while not self.policy_unchanged:
-            self.policy_unchanged = True
+        while not self.termination_req:
+            self.termination_req = True
             self.eval_policy(self.policy)
             self.render(values = self.values, qvalues=self.qvalues, policy=self.policy, wait= True)
             self.imporve_policy()
-        
+            self.render(values = self.values, qvalues=self.qvalues, policy=self.policy, wait= True)
+
         return self.policy
 
 
@@ -191,7 +187,17 @@ class PolicyIterationAgent(MDPAgent):
             
     def imporve_policy(self):
         for state in self.env.get_non_terminal_states():
-            pass
+            self.new_policy[state] = self.get_best_action(state)
+        if not self.policy_unchanged(): self.termination_req = False
+        
+    def policy_unchanged(self):
+        for key in self.policy:
+            if self.policy[key] != self.new_policy[key]:
+                self.policy = copy.deepcopy(self.new_policy)
+                return False
+        self.policy = copy.deepcopy(self.new_policy)
+        return True
+                
             
             
 
@@ -206,8 +212,8 @@ if __name__ == "__main__":
     S.D....
     ..#...D
     """
-    map = Map.from_string(MAP)
-    #map = map_from_image("./maps/normal/normal.png")
+    #map = Map.from_string(MAP)
+    map = map_from_image("./maps/normal/normal3.png")
     env = MDPProblem(
         map,
         action_probs=dict(forward=0.8, left=0.1, right=0.1, backward=0.0),
@@ -215,8 +221,8 @@ if __name__ == "__main__":
     )
 
     print(env.get_states())
-    agent = ValueIterationAgent(env, gamma=0.9, epsilon=0.001)
-    #agent = PolicyIterationAgent(env, gamma=0.9, epsilon=0.001)
+    #agent = ValueIterationAgent(env, gamma=0.9, epsilon=0.001)
+    agent = PolicyIterationAgent(env, gamma=0.9, epsilon=0.001)
     policy = agent.find_policy()
     print("Policy found:", policy)
     agent.render(policy=policy, values=agent.values, qvalues=agent.qvalues ,wait=True)
