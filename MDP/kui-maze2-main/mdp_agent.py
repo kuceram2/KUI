@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import random
 import copy
 from typing import Optional
 
@@ -15,18 +14,15 @@ from kuimaze2.map import Action, Map, State
 class MDPAgent:
     """Base class for VI and PI agents"""
 
-    # Can be used to define common data/methods of both agents (algorithms)
-
     def __init__(self, env: MDPProblem, gamma: float = 0.9, epsilon: float = 0.001):
         self.env = env # enviroment
         self.gamma = gamma # discount factor
         self.epsilon = epsilon # max error
         
-        self.values = {}
-        self.qvalues = {}
+        self.values = self.init_values()
+        self.qvalues = self.init_qvalues()
+        self.policy = self.init_policy()
         self.termination_req = False
-
-        
 
     def render(
         self,
@@ -36,23 +32,19 @@ class MDPAgent:
         **kwargs,
     ):      
         """Render the environment with added agent's data"""
-        #values = {state: -1 + 2 * random.random() for state in self.env.get_states()}
         value_texts = {state: f"{value:.2f}" for state, value in values.items()}
         
-        # print("QVALUES: ", qvalues)
         qvalue_texts = {
             (state, action): f"{q:.2f}"
             for state, actions in qvalues.items()
             for action, q in actions.items()
         }
-        # Prepare policy for rendering
         
-        #policy_texts = {state: f"{policy[state]}" for state in self.env.get_states()}
         policy_texts = {}
         for state in self.env.get_states():
             policy_texts[state] = policy[state]
         
-        #policy_texts = {state: f"X" for state in self.env.get_states()}
+        # Prepare policy for rendering
         self.env.render(
             square_colors=values,
             square_texts=value_texts,
@@ -81,71 +73,64 @@ class MDPAgent:
             for state in self.env.get_states()
         }
         return qvalues
+    
+    def init_policy(self) -> Policy:
+        """Initializes a policy of """
+        return {
+            state: self.env.get_actions(state)[0]
+            for state in self.env.get_states()
+        }
 
     def get_qvalue(self, state: State, action: Action):
+        """Returns est. utility (qvalue) of an action in a state"""
         new_states = self.env.get_next_states_and_probs(state=state, action=action)
         qval = 0
-        for new_state in new_states:
-            print(new_state, self.values[new_state[0]])
+        for new_state in new_states: 
+            #print(new_state, self.values[new_state[0]])
+            # bellman equation
             qval += new_state[1] * (self.env.get_reward(state) + (self.gamma * self.values[new_state[0]]))
         return qval
             
     def get_best_action(self, state: State):
+        """Returns best action for given state based on qvalues"""
         actions = self.env.get_actions(state)
         
+        # calculates qvalue for each action and chooses the best one
         for action in actions:
-            #print(action)
             self.qvalues[state][action] = self.get_qvalue(state, action)
-            #print(self.qvalues[state])
-            best_action = max(self.qvalues[state], key=self.qvalues[state].get)
+        best_action = max(self.qvalues[state], key=self.qvalues[state].get)
         return best_action
+    
+    def tuning_done(self, old_val, new_val):
+        """Checks if termination condition for value iteration is reached"""
+        # check if change in value is  <= epsilon*(gamma-1)/gamma
+        if (abs(old_val - new_val) <= (self.epsilon*(1 - self.gamma)/self.gamma)): 
+            return True
+        else: return False
 
 class ValueIterationAgent(MDPAgent):
-        #return {state: 0 for state in self.env.get_non_terminal_states()}
         
     def find_policy(self) -> Policy:
-        self.values = self.init_values()
-        self.states = self.env.get_states()
-        self.actions = self.env.get_actions(self.states[0])
-        self.qvalues = self.init_qvalues()
-        self.policy = {}
         
-        # print("values: ",self.values)
-        # print("actions: ", self.actions)
-
-        #fabricate policy so the visualization can run
-        for state in self.states:
-            self.policy[state] = self.actions[1]
-            
-        # print("test action:", self.actions[1])
-        # print("example qvalue: ", self.qvalues[self.states[0]][self.actions[0]])
-        
+        # while changes in policy are happening, keep improving
         while not self.termination_req:
-            print("=========== New round ===========")
             self.termination_req = True
             for state in self.env.get_non_terminal_states():
                 self.bellman_update(state)
                 self.render(values = self.values, policy=self.policy, qvalues= self.qvalues, wait= True)
         
+        # when done improving, construct policy from qvalues
         self.create_policy()
         
         return self.policy
 
     def bellman_update(self, state: State):
-        
+        """Perform bellman update of a value of given state"""
         best_action = self.get_best_action(state)
         new_value = self.qvalues[state][best_action]
         if not self.tuning_done(self.values[state], new_value): self.termination_req = False 
         self.values[state] = new_value
-        print("MAX: ",self.values[state])
-                      
-    def tuning_done(self, old_val, new_val):
-        if (abs(old_val - new_val) <= (self.epsilon*(1 - self.gamma)/self.gamma)):
-            print("Reqired precision reached")
-            return True
-        else: 
-            print("---------Big improvement")
-            return False
+        #print("MAX: ",self.values[state])
    
     def create_policy(self):
         for state in self.env.get_non_terminal_states():
@@ -155,18 +140,9 @@ class ValueIterationAgent(MDPAgent):
 
 class PolicyIterationAgent(MDPAgent):
 
-    def init_policy(self) -> Policy:
-        """Create a random policy"""
-        return {
-            state: random.choice(self.env.get_actions(state))
-            for state in self.env.get_states()
-        }
-
     #returns found policy as a dictionary: (state, action)
     def find_policy(self) -> Policy:
-        self.values = self.init_values()
-        self.policy = self.init_policy()
-        self.qvalues = self.init_qvalues()
+        self.tmp_values = self.init_values()
         self.new_policy = self.init_policy()
         
         while not self.termination_req:
@@ -180,17 +156,25 @@ class PolicyIterationAgent(MDPAgent):
 
 
     def eval_policy(self, policy: Policy):
-        for state in self.env.get_non_terminal_states():
-            action = policy[state]
-            self.values[state] = self.get_qvalue(state, action)
-            print(f"value of {state} updated: { self.values[state]} ")
+        """Performs STATIC evaluation of the policy"""
+        terminate = False
+        while not terminate:
+            terminate = True
+            for state in self.env.get_non_terminal_states():
+                action = policy[state]
+                self.tmp_values[state] = self.get_qvalue(state, action)
+                if not self.tuning_done(self.values[state], self.tmp_values[state]): terminate = False
+            
+            self.values = copy.deepcopy(self.tmp_values)
             
     def imporve_policy(self):
+        """Changes policy according to updated values of states"""
         for state in self.env.get_non_terminal_states():
             self.new_policy[state] = self.get_best_action(state)
         if not self.policy_unchanged(): self.termination_req = False
         
     def policy_unchanged(self):
+        """Checks if no changes were made to previous policy"""
         for key in self.policy:
             if self.policy[key] != self.new_policy[key]:
                 self.policy = copy.deepcopy(self.new_policy)
@@ -199,21 +183,17 @@ class PolicyIterationAgent(MDPAgent):
         return True
                 
             
-            
-
 if __name__ == "__main__":
     from kuimaze2 import Map
     from kuimaze2.map_image import map_from_image
 
     MAP = """
-    ..#..#.
-    ...G.D.
-    .#.D...
-    S.D....
-    ..#...D
+    ...G
+    .#.D
+    ....
     """
-    #map = Map.from_string(MAP)
-    map = map_from_image("./maps/normal/normal3.png")
+    map = Map.from_string(MAP)
+    #map = map_from_image("./maps/normal/normal3.png")
     env = MDPProblem(
         map,
         action_probs=dict(forward=0.8, left=0.1, right=0.1, backward=0.0),
